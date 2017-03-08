@@ -44,9 +44,11 @@ app.post('/', function(req, res) {
 	connector.createConnection();
 	connector.getResults(queryParts, function(pageIds) {
 		connector.getPageObjects(queryParts, pageIds, function(pageObjects) {
+			console.log(pageObjects);
+			console.log("checkpoint 3");
 			res.render('home', {query: req.body.query, results: pageObjects});
-			connector.destroyConnection();
 			console.log("[SERVER]: task completed");
+			connector.destroyConnection();
 		});
 	});
 });

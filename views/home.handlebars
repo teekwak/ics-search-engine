@@ -1,8 +1,35 @@
 <h1>Random Search Engine</h1>
 
-<form class="input-group" action="/search" method="POST">
+<form class="input-group" action="/" method="POST">
 	<input name="query" type="text" class="go-text-input form-control" placeholder="Search for..." />
 	<span class="input-group-btn">
 	  <button class="go-submit-button btn btn-secondary" type="submit">Go!</button>
 	</span>
 </form>
+
+<div class="loading" style='display:none;'>
+	<!-- loading image from https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif -->
+	<img src='assets/loading.gif'/>
+</div>
+<div class="container">
+	{{#if results}}
+		<table class="table">
+	    <thead>
+	      <tr>
+	        <th>Rank</th>
+	        <th>URL</th>
+	        <th>TF-IDF Score</th>
+	      </tr>
+	    </thead>
+			<tbody class="results">
+				{{#each results}}
+					<tr>
+						<th>{{inc @index}}</th>
+						<th>{{this}}</th>
+						<th>{{this}}</th>
+					</tr>
+				{{/each}}
+			</tbody>
+		</table>
+	{{/if}}
+</div>

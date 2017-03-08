@@ -1,8 +1,8 @@
 const express = require('express');
 const handlebars = require('express-handlebars');
-const mysql = require('mysql');
 const bodyParser = require('body-parser');
-const credentials = require('./credentials');
+const credentials = require('./custom_modules/credentials');
+const MySQLConnector = require('./custom_modules/mysql-connector')
 
 const app = express();
 
@@ -12,7 +12,14 @@ app.use('/js', express.static(__dirname + '/node_modules/jquery/dist'));
 app.use('/css', express.static(__dirname + '/node_modules/bootstrap/dist/css'));
 
 // set handlbars as templating framework
-app.engine('handlebars', handlebars({defaultLayout: 'main'}));
+app.engine('handlebars', handlebars({
+	defaultLayout: 'main',
+	helpers: {
+		inc: function(value, options) {
+			return parseInt(value) + 1;
+		}
+	}
+}));
 app.set('view engine', 'handlebars');
 
 // parse form information
@@ -23,27 +30,13 @@ app.get('/', function (req, res) {
     res.render('home');
 });
 
-app.post('/search', function(req, res) {
-	console.log(req.body.query);
-
-	var connection = mysql.createConnection({
-	  host     : credentials.host,
-	  user     : credentials.username,
-	  password : credentials.password,
-	  database : credentials.database
+app.post('/', function(req, res) {
+	const connector = new MySQLConnector(credentials);
+	connector.getResults(req.body.query, function(data) {
+		console.log(data);
+		connector.destroyConnection();
+		res.render('home', {results: data});
 	});
-
-	connection.connect();
-
-	connection.query('SELECT COUNT(*) FROM Pages', function (err, rows, fields) {
-	  if (err) throw err;
-
-	  console.log('The output is: ', rows[0]);
-	})
-
-	connection.end();
-
-	res.render('home');
 });
 
 // start app on port 3000

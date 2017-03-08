@@ -1,4 +1,6 @@
 const mysql = require('mysql');
+const async = require('async');
+const _ = require('underscore');
 
 class MySQLConnector {
 	constructor(credentials) {
@@ -25,15 +27,28 @@ class MySQLConnector {
 		this.connection.end();
 	}
 
-	getResults(queryString, callback) {
+	getResults(queryString, renderCallback) {
 		this.createConnection();
 
 		console.log("Your query string was: " + queryString);
 
-		this.connection.query('SELECT PAGES FROM Words WHERE WORD="' + queryString + '"', function (err, rows, fields) {
-		  if (err) throw err;
+		async.map(queryString.split(" "), function(word, callback) {
+			this.connection.query('SELECT PAGES FROM Words WHERE WORD="' + word + '"', function (err, rows, fields) {
+			  if (err) throw err;
 
-		  callback(rows[0]);
+			  if(rows[0] == null) {
+			  	callback(null, []);
+			  }
+			  else {
+			  	// convert string to actual array
+			  	callback(null, JSON.parse(rows[0]['PAGES'].replace(/\'/g, '\"')));	
+			  }
+			});
+		}.bind({connection: this.connection}), function(err, results) {
+			// get intersection of all arrays
+			console.log(_.intersection.apply(_, results));
+
+			renderCallback(_.intersection.apply(_, results));
 		});
 	}
 }

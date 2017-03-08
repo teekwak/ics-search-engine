@@ -33,9 +33,8 @@ app.get('/', function (req, res) {
 app.post('/', function(req, res) {
 	const connector = new MySQLConnector(credentials);
 	connector.getResults(req.body.query, function(data) {
-		console.log(data);
-		connector.destroyConnection();
-		res.render('home', {results: data});
+			res.render('home', {results: data});
+			connector.destroyConnection();
 	});
 });
 

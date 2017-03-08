@@ -10,10 +10,12 @@
   "author": "Thomas Kwak",
   "license": "ISC",
   "dependencies": {
+    "async": "^2.1.5",
     "body-parser": "^1.17.1",
     "express": "^4.15.2",
     "express-handlebars": "^3.0.0",
-    "mysql": "^2.13.0"
+    "mysql": "^2.13.0",
+    "underscore": "^1.8.3"
   },
   "devDependencies": {
     "nodemon": "^1.11.0"

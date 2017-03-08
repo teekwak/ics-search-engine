@@ -1,4 +1,5 @@
 node_modules
+credentials.js
 
 # Mac only
 .DS_Store

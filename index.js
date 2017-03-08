@@ -1,11 +1,15 @@
+const bodyParser = require('body-parser');
+const compression = require('compression');
 const express = require('express');
 const handlebars = require('express-handlebars');
-const bodyParser = require('body-parser');
+const stemmer = require('stemmer');
 const credentials = require('./custom_modules/credentials');
 const MySQLConnector = require('./custom_modules/mysql-connector')
-const stemmer = require('stemmer');
 
 const app = express();
+
+// use compression!!!
+app.use(compression());
 
 // redirect bootstrap and jquery dependencies
 app.use('/js', express.static(__dirname + '/node_modules/bootstrap/dist/js'));

@@ -25,8 +25,8 @@
 				{{#each results}}
 					<tr>
 						<th>{{inc @index}}</th>
-						<th><a href="http://{{this}}" target="_blank">http://{{this}}</a></th>
-						<th>{{this}}</th>
+						<th><a href="http://{{this.url}}" target="_blank">http://{{this.url}}</a></th>
+						<th>{{this.tfidf}}</th>
 					</tr>
 				{{/each}}
 			</tbody>

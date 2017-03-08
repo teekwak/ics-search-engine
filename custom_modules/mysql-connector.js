@@ -27,28 +27,51 @@ class MySQLConnector {
 		this.connection.end();
 	}
 
-	getResults(queryString, renderCallback) {
+	getResults(queryString, outerCallback) {
 		this.createConnection();
 
 		console.log("Your query string was: " + queryString);
 
-		async.map(queryString.split(" "), function(word, callback) {
-			this.connection.query('SELECT PAGES FROM Words WHERE WORD="' + word + '"', function (err, rows, fields) {
+		async.map(queryString.split(" "), function(word, innerCallback) {
+			this.connection.query('SELECT PAGES FROM Words WHERE WORD="' + word + '"', function(err, rows, fields) {
 			  if (err) throw err;
 
 			  if(rows[0] == null) {
-			  	callback(null, []);
-			  }
-			  else {
+			  	innerCallback(null, []);
+			  } else {
 			  	// convert string to actual array
-			  	callback(null, JSON.parse(rows[0]['PAGES'].replace(/\'/g, '\"')));	
+			  	innerCallback(null, JSON.parse(rows[0]['PAGES'].replace(/\'/g, '\"')));	
 			  }
 			});
 		}.bind({connection: this.connection}), function(err, results) {
 			// get intersection of all arrays
-			console.log(_.intersection.apply(_, results));
+			outerCallback(_.intersection.apply(_, results));
+		});
+	}
 
-			renderCallback(_.intersection.apply(_, results));
+	getPageObjects(queryString, pageIds, outerCallback) {
+		const queryWords = queryString.split(" ");
+
+		async.map(pageIds, function(id, innerCallback) {
+			this.connection.query('SELECT URL, WORDS FROM Pages WHERE ID="' + id + '"', function(err, rows, fields) {
+			  if (err) throw err;
+
+			  if(rows[0]['URL'] != null && rows[0]['WORDS'] != null) {
+			  	const pageWords = JSON.parse(rows[0]['WORDS'].replace(/\'/g, '\"'));
+
+			  	let tfidf_score = 0.0;
+			  	queryWords.forEach(word => {
+			  		tfidf_score += pageWords[word]['tfidf'];
+			  	});
+
+			  	innerCallback(null, {url: rows[0]['URL'], tfidf: tfidf_score});	
+			  }
+			});
+		}.bind({connection: this.connection}), function(err, results) {
+			outerCallback(results.sort(function(a, b) {
+				// sort in descending order
+				return b.tfidf - a.tfidf;
+			}).slice(0, 10));
 		});
 	}
 }

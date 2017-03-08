@@ -32,9 +32,11 @@ app.get('/', function (req, res) {
 
 app.post('/', function(req, res) {
 	const connector = new MySQLConnector(credentials);
-	connector.getResults(req.body.query, function(data) {
-			res.render('home', {results: data});
+	connector.getResults(req.body.query, function(pageIds) {
+		connector.getPageObjects(req.body.query, pageIds, function(pageObjects) {
+			res.render('home', {results: pageObjects});
 			connector.destroyConnection();
+		});
 	});
 });
 

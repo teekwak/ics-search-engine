@@ -3,6 +3,7 @@ const handlebars = require('express-handlebars');
 const bodyParser = require('body-parser');
 const credentials = require('./custom_modules/credentials');
 const MySQLConnector = require('./custom_modules/mysql-connector')
+const stemmer = require('stemmer');
 
 const app = express();
 
@@ -31,11 +32,17 @@ app.get('/', function (req, res) {
 });
 
 app.post('/', function(req, res) {
+	queryParts = req.body.query.split(" ").map(stemmer);
+
+	console.log("[SERVER]: query: " + queryParts);
+
 	const connector = new MySQLConnector(credentials);
-	connector.getResults(req.body.query, function(pageIds) {
-		connector.getPageObjects(req.body.query, pageIds, function(pageObjects) {
-			res.render('home', {results: pageObjects});
+	connector.createConnection();
+	connector.getResults(queryParts, function(pageIds) {
+		connector.getPageObjects(queryParts, pageIds, function(pageObjects) {
+			res.render('home', {query: req.body.query, results: pageObjects});
 			connector.destroyConnection();
+			console.log("[SERVER]: task completed")
 		});
 	});
 });

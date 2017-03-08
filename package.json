@@ -15,6 +15,7 @@
     "express": "^4.15.2",
     "express-handlebars": "^3.0.0",
     "mysql": "^2.13.0",
+    "stemmer": "^1.0.0",
     "underscore": "^1.8.3"
   },
   "devDependencies": {

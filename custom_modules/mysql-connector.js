@@ -21,18 +21,14 @@ class MySQLConnector {
 
 	destroyConnection() {
 		if(this.connection == null) {
-			console.log("[SERVER]: No connection to destroy");
+			console.log("[SERVER]: no connection to destroy");
 		}
 
 		this.connection.end();
 	}
 
-	getResults(queryString, outerCallback) {
-		this.createConnection();
-
-		console.log("Your query string was: " + queryString);
-
-		async.map(queryString.split(" "), function(word, innerCallback) {
+	getResults(queryParts, outerCallback) {
+		async.map(queryParts, function(word, innerCallback) {
 			this.connection.query('SELECT PAGES FROM Words WHERE WORD="' + word + '"', function(err, rows, fields) {
 			  if (err) throw err;
 
@@ -49,9 +45,7 @@ class MySQLConnector {
 		});
 	}
 
-	getPageObjects(queryString, pageIds, outerCallback) {
-		const queryWords = queryString.split(" ");
-
+	getPageObjects(queryParts, pageIds, outerCallback) {
 		async.map(pageIds, function(id, innerCallback) {
 			this.connection.query('SELECT URL, WORDS FROM Pages WHERE ID="' + id + '"', function(err, rows, fields) {
 			  if (err) throw err;
@@ -60,7 +54,7 @@ class MySQLConnector {
 			  	const pageWords = JSON.parse(rows[0]['WORDS'].replace(/\'/g, '\"'));
 
 			  	let tfidf_score = 0.0;
-			  	queryWords.forEach(word => {
+			  	queryParts.forEach(word => {
 			  		tfidf_score += pageWords[word]['tfidf'];
 			  	});
 

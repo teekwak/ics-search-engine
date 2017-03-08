@@ -12,24 +12,29 @@
 	<img src='assets/loading.gif'/>
 </div>
 <div class="container">
-	{{#if results}}
-		<table class="table">
-	    <thead>
-	      <tr>
-	        <th>Rank</th>
-	        <th>URL</th>
-	        <th>TF-IDF Score</th>
-	      </tr>
-	    </thead>
-			<tbody class="results">
-				{{#each results}}
-					<tr>
-						<th>{{inc @index}}</th>
-						<th><a href="http://{{this.url}}" target="_blank">http://{{this.url}}</a></th>
-						<th>{{this.tfidf}}</th>
-					</tr>
-				{{/each}}
-			</tbody>
-		</table>
+	{{#if query}}
+		<h3 style="text-align: center;">Search results for: {{query}}</h3>
+		{{#if results.length}}
+			<table class="table">
+		    <thead>
+		      <tr>
+		        <th>Rank</th>
+		        <th>URL</th>
+		        <th>TF-IDF Score</th>
+		      </tr>
+		    </thead>
+				<tbody class="results">
+					{{#each results}}
+						<tr>
+							<th>{{inc @index}}</th>
+							<th><a href="http://{{this.url}}" target="_blank">http://{{this.url}}</a></th>
+							<th>{{this.tfidf}}</th>
+						</tr>
+					{{/each}}
+				</tbody>
+			</table>
+		{{else}}
+			<h5 style="text-align: center;">No results</h5>
+		{{/if}}
 	{{/if}}
 </div>

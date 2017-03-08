@@ -4,12 +4,15 @@
   "description": "Text search engine for In4matx 225",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Thomas Kwak",
   "license": "ISC",
   "dependencies": {
+    "body-parser": "^1.17.1",
     "express": "^4.15.2",
+    "express-handlebars": "^3.0.0",
     "mysql": "^2.13.0"
   }
 }

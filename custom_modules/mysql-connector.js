@@ -33,7 +33,7 @@ class MySQLConnector {
 			  if (err) throw err;
 
 			  if(rows[0] == null) {
-			  	innerCallback(null, []);
+			  	return innerCallback(null, []);
 			  } else {
 			  	// convert string to actual array
 			  	innerCallback(null, JSON.parse(rows[0]['PAGES'].replace(/\'/g, '\"')));	

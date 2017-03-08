@@ -46,7 +46,7 @@ app.post('/', function(req, res) {
 		connector.getPageObjects(queryParts, pageIds, function(pageObjects) {
 			res.render('home', {query: req.body.query, results: pageObjects});
 			connector.destroyConnection();
-			console.log("[SERVER]: task completed")
+			console.log("[SERVER]: task completed");
 		});
 	});
 });

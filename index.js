@@ -49,10 +49,10 @@ app.post('/', function(req, res) {
 		mysql_connector.getPageURLs(redisResults, function(mysqlResults) {
 			res.render('home', {query: req.body.query, results: mysqlResults});
 			console.log("[SERVER]: task completed");
+			mysql_connector.close();
 		});
-		mysql_connector.close();
+		redis_connector.close();	
 	});
-	redis_connector.close();
 });
 
 // start app on port 3000

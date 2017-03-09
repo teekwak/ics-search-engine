@@ -18,8 +18,6 @@ class RedisConnector {
 	}
 
 	getResults(queryParts, outerCallback) {
-		console.log(queryParts);
-
 		async.map(queryParts, function(word, innerCallback) {
 			this.client.lrange(word, 0, -1, function(err, reply) {
 				if (err) console.log(err);
@@ -108,6 +106,15 @@ class RedisConnector {
 						return outerCallback(returnSetArray);
 					}
 				}
+			}
+
+			// if we do not get 10
+			if(Object.keys(returnSet).length !== 0) {
+				const returnSetArray = [];
+				for(let key in returnSet) {
+					returnSetArray.push({id: key, tfidf: returnSet[key]});
+				}
+				return outerCallback(returnSetArray);
 			}
 
 			return outerCallback([]);

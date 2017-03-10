@@ -12,12 +12,9 @@ class RedisConnector {
 	// close connection to Redis
 	// return type: void
 	close() {
-		if(this.client === null) {
-			console.log("[SERVER]: no Redis connection to close");
-			return;
+		if(this.client !== null) {
+			this.client.quit();
 		}
-
-		this.client.quit();
 	}
 
 	// compare arrays of objects with id property
@@ -78,20 +75,17 @@ class RedisConnector {
 					// clone returnSet and see if adding the frontier will change anything
 					let returnSetClone = _.cloneDeep(returnSet);
 
-					// clone mapping in case we add things to it
-					const idToIndexMappingClone = JSON.parse(JSON.stringify(idToIndexMapping));
-
 					// add entire frontier to return set
 					for(let j = 0; j < results.length; j++) {
 						if(index >= results[j].length) continue;
 						const lineSplit = results[j][pointers[j]].split(",");
 
-						if(idToIndexMappingClone.hasOwnProperty(lineSplit[0])) {
-							returnSetClone[idToIndexMappingClone[lineSplit[0]]].tfidf += parseFloat(lineSplit[1]);
+						if(idToIndexMapping.hasOwnProperty(lineSplit[0])) {
+							returnSetClone[idToIndexMapping[lineSplit[0]]].tfidf += parseFloat(lineSplit[1]);
 							pointers[j] += 1;
 						} else {
 							returnSetClone.push({ id: lineSplit[0], tfidf: parseFloat(lineSplit[1]) });
-							idToIndexMappingClone[returnSetClone.length] = lineSplit[0];
+							idToIndexMapping[returnSetClone.length] = lineSplit[0];
 						}
 					}
 
@@ -105,7 +99,6 @@ class RedisConnector {
 						return outerCallback(returnSet);
 					} else {
 						returnSet = returnSetClone;
-						idToIndexMapping = idToIndexMappingClone; // this might be wrong. some ids will no longer exist due to slicing
 					}
 				}
 

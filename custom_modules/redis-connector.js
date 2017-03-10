@@ -1,5 +1,6 @@
 'use strict';
 
+const _ = require('lodash');
 const async = require('async');
 const redis = require('redis');
 
@@ -8,16 +9,46 @@ class RedisConnector {
 		this.client = redis.createClient();
 	}
 
+	// close connection to Redis
+	// return type: void
 	close() {
 		if(this.client === null) {
-			console.log("[SERVER]: no Redis connection to close");	
+			console.log("[SERVER]: no Redis connection to close");
 			return;
 		}
 
 		this.client.quit();
 	}
 
-	getResults(queryParts, outerCallback) {
+	// compare arrays of objects with id property
+	// return type: boolean
+	compareIds(originalArray, comparedArray) {
+		let same = true;
+		for(let i = 0; i < originalArray.length; i++) {
+			if(originalArray[i].id != comparedArray[i].id) {
+				same = false;
+				break;
+			}
+		}
+		return same;
+	}
+
+	// sort by TF-IDF in descending order
+	// return type: number
+	sortByTFIDF(a, b) {
+		// sort by id if TF-IDF score is close enough
+		if(Math.abs(b.tfidf - a.tfidf) < 0.000001) {
+			if(a.id > b.id) return 1;
+			else if(a.id < b.id) return -1;
+			return 0;
+		}
+
+		return b.tfidf - a.tfidf;
+	}
+
+	// gets the results based on a query using an AND representation
+	// return type: array of objects
+	getResults(queryParts, numberOfResults, outerCallback) {
 		async.map(queryParts, function(word, innerCallback) {
 			this.client.lrange(word, 0, -1, function(err, reply) {
 				if (err) console.log(err);
@@ -27,7 +58,9 @@ class RedisConnector {
 				}));
 			});
 		}.bind({client: this.client}), function(err, results) {
-			// AND representation
+			// create mappings
+			let idToIndexMapping = {};
+			let returnSet = [];
 
 			// created index pointers
 			let maxLength = 0;
@@ -37,88 +70,77 @@ class RedisConnector {
 				if(result.length > maxLength) maxLength = result.length;
 			});
 
-			const returnSet = {}; // page -> tfidf score, convert to array later
-			for(let i = 0; i < maxLength; i++) {
+			// loop begins
+			for(let index = 0; index < maxLength; index++) {
+				if(Object.keys(returnSet).length >= numberOfResults) {
+					returnSet.sort(this.sortByTFIDF);
+
+					// clone returnSet and see if adding the frontier will change anything
+					let returnSetClone = _.cloneDeep(returnSet);
+
+					// clone mapping in case we add things to it
+					const idToIndexMappingClone = JSON.parse(JSON.stringify(idToIndexMapping));
+
+					// add entire frontier to return set
+					for(let j = 0; j < results.length; j++) {
+						if(index >= results[j].length) continue;
+						const lineSplit = results[j][pointers[j]].split(",");
+
+						if(idToIndexMappingClone.hasOwnProperty(lineSplit[0])) {
+							returnSetClone[idToIndexMappingClone[lineSplit[0]]].tfidf += parseFloat(lineSplit[1]);
+							pointers[j] += 1;
+						} else {
+							returnSetClone.push({ id: lineSplit[0], tfidf: parseFloat(lineSplit[1]) });
+							idToIndexMappingClone[returnSetClone.length] = lineSplit[0];
+						}
+					}
+
+					// sort in descending order of TF-IDF
+					returnSetClone.sort(this.sortByTFIDF);
+
+					returnSet = returnSet.slice(0, numberOfResults);
+					returnSetClone = returnSetClone.slice(0, numberOfResults);
+
+					if(this.compareIds(returnSet, returnSetClone)) {
+						return outerCallback(returnSet);
+					} else {
+						returnSet = returnSetClone;
+						idToIndexMapping = idToIndexMappingClone; // this might be wrong. some ids will no longer exist due to slicing
+					}
+				}
+
+				// get next highest TF-IDF scoring page id
 				let pointerToIncrement = -1;
-				let maxTFIDFPage = '';
+				let maxTFIDFPageID = '';
 				let maxTFIDF = -1;
 				for(let j = 0; j < results.length; j++) {
-					if(i >= results[j].length) continue;
+					if(index >= results[j].length) continue;
 					const lineSplit = results[j][pointers[j]].split(",");
 					const tfidf = parseFloat(lineSplit[1]);
 
 					if(tfidf > maxTFIDF) {
 						maxTFIDF = tfidf;
-						maxTFIDFPage = lineSplit[0];
+						maxTFIDFPageID = lineSplit[0];
 						pointerToIncrement = j;
 					}
 				}
 
+				// increment pointer
 				if(pointerToIncrement != -1) {
-					pointers[pointerToIncrement] += 1;	
+					pointers[pointerToIncrement] += 1;
 				}
-				
-				if(returnSet.hasOwnProperty(maxTFIDFPage)) {
-					returnSet[maxTFIDFPage] += maxTFIDF;
+
+				// add TF-IDF value to result set and update id to index mapping
+				if(idToIndexMapping.hasOwnProperty(maxTFIDFPageID)) {
+					returnSet[idToIndexMapping[maxTFIDFPageID]].tfidf += maxTFIDF;
 				} else {
-					returnSet[maxTFIDFPage] = maxTFIDF;
-				}
-
-				if(Object.keys(returnSet).length == 10) {
-					const returnSetArray = [];
-
-					for(let key in returnSet) {
-						returnSetArray.push({id: key, tfidf: returnSet[key]});
-					}
-
-					returnSetArray.sort(function(a, b) {
-						return b.tfidf - a.tfidf;
-					});
-
-					for(let j = 0; j < results.length; j++) {
-						if(i >= results[j].length) continue;
-						const lineSplit = results[j][pointers[j]].split(",");
-
-						if(Object.keys(returnSet).hasOwnProperty(lineSplit[0])) {
-							returnSet[lineSplit[0]] += parseFloat(lineSplit[1]);
-							pointers[j] += 1;
-						}
-					}
-
-					const newReturnSetArray = [];
-					for(let key in returnSet) {
-						newReturnSetArray.push({id: key, tfidf: returnSet[key]});
-					}
-
-					newReturnSetArray.sort(function(a, b) {
-						return b.tfidf - a.tfidf;
-					});
-
-					let same = true;
-					for(let i = 0; i < returnSetArray; i++) {
-						if(returnSetArray[i].id != newReturnSetArray[i].id) {
-							same = false;
-							break;
-						}
-					}
-
-					if(same) {
-						return outerCallback(returnSetArray);
-					}
+					idToIndexMapping[maxTFIDFPageID] = returnSet.length;
+					returnSet.push({id: maxTFIDFPageID, tfidf: maxTFIDF});
 				}
 			}
 
-			// if we do not get 10
-			if(Object.keys(returnSet).length !== 0) {
-				const returnSetArray = [];
-				for(let key in returnSet) {
-					returnSetArray.push({id: key, tfidf: returnSet[key]});
-				}
-				return outerCallback(returnSetArray);
-			}
-
-			return outerCallback([]);
-		});
+			return Object.keys(returnSet).length !== 0 ? outerCallback(returnSet): outerCallback([]);
+		}.bind(this));
 	}
 }
 

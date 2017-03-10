@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 const bodyParser = require('body-parser');
 const compression = require('compression');
@@ -44,14 +44,14 @@ app.post('/', function(req, res) {
 	console.log("[SERVER]: query: " + queryParts);
 
 	const redis_connector = new RedisConnector();
-	redis_connector.getResults(queryParts, function(redisResults) {
+	redis_connector.getResults(queryParts, 10, function(redisResults) {
 		const mysql_connector = new MySQLConnector(credentials);
 		mysql_connector.getPageURLs(redisResults, function(mysqlResults) {
 			res.render('home', {query: req.body.query, results: mysqlResults});
 			console.log("[SERVER]: task completed");
 			mysql_connector.close();
 		});
-		redis_connector.close();	
+		redis_connector.close();
 	});
 });
 

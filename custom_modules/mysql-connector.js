@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 const mysql = require('mysql');
 
@@ -42,7 +42,7 @@ class MySQLConnector {
 				sqlQuery += 'ID="' + obj.id + '"';
 				counter = false;
 			} else {
-				sqlQuery += ' OR ID="' + obj.id + '"';	
+				sqlQuery += ' OR ID="' + obj.id + '"';
 			}
 		});
 
@@ -62,8 +62,8 @@ class MySQLConnector {
 		  return callback(pageObjects);
 		});
 
-		
-	} 
+
+	}
 
 	// getResults(queryParts, callback) {
 	// 	// create query
@@ -74,7 +74,7 @@ class MySQLConnector {
 	// 			sqlQuery += 'WORD="' + part + '"';
 	// 			counter = false;
 	// 		} else {
-	// 			sqlQuery += ' OR WORD="' + part + '"';	
+	// 			sqlQuery += ' OR WORD="' + part + '"';
 	// 		}
 	// 	});
 
@@ -115,7 +115,7 @@ class MySQLConnector {
 	// 			sqlQuery += 'ID="' + id + '"';
 	// 			counter = false;
 	// 		} else {
-	// 			sqlQuery += ' OR ID="' + id + '"';	
+	// 			sqlQuery += ' OR ID="' + id + '"';
 	// 		}
 	// 	});
 

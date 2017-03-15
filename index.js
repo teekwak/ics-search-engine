@@ -5,8 +5,6 @@ const compression = require('compression');
 const express = require('express');
 const handlebars = require('express-handlebars');
 const stemmer = require('stemmer');
-const credentials = require('./custom_modules/credentials');
-const MySQLConnector = require('./custom_modules/mysql-connector');
 const RedisConnector = require('./custom_modules/redis-connector');
 
 const app = express();
@@ -41,17 +39,17 @@ app.get('/', function (req, res) {
 app.post('/', function(req, res) {
 	const queryParts = req.body.query.split(" ").map(stemmer);
 
+	var t0 = Date.now();
 	console.log("[SERVER]: query: " + queryParts);
 
 	const redis_connector = new RedisConnector();
-	redis_connector.getResults(queryParts, 10, function(redisResults) {
-		const mysql_connector = new MySQLConnector(credentials);
-		mysql_connector.getPageURLs(redisResults, function(mysqlResults) {
-			res.render('home', {query: req.body.query, results: mysqlResults});
-			console.log("[SERVER]: task completed");
-			mysql_connector.close();
+	redis_connector.getResults(new Set(queryParts), 10, function(redisResults) {
+		redis_connector.getPageURLs(redisResults, function(finalResults) {
+			res.render('home', {query: req.body.query, results: finalResults});
+			var t1 = Date.now();
+			console.log("[SERVER]: task completed in " + (t1-t0) + " ms");
+			redis_connector.close();
 		});
-		redis_connector.close();
 	});
 });
 

@@ -43,6 +43,28 @@ class RedisConnector {
 		return b.tfidf - a.tfidf;
 	}
 
+	// gets the urls for the page objects
+	// return type: array of objects
+	getPageURLs(pageObjects, callback) {
+		async.map(pageObjects, function(obj, innerCallback) {
+			this.client.get('&_' + obj.id, function(err, reply) {
+				if (err) console.log(err);
+
+				return innerCallback(null, {id: obj.id, url: reply});
+			});
+		}.bind({client: this.client}), function(err, results) {
+			results.forEach(result => {
+				pageObjects.forEach(pageObject => {
+		  		if(result.id === pageObject.id) {
+		  			pageObject.url = result.url;
+		  		}
+				});
+			});
+
+			return callback(pageObjects);
+		});
+	}
+
 	// gets the results based on a query using an AND representation
 	// return type: array of objects
 	getResults(queryParts, numberOfResults, outerCallback) {

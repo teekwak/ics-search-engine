@@ -30,17 +30,17 @@ class RedisConnector {
 		return same;
 	}
 
-	// sort by TF-IDF in descending order
+	// sort by relevance score in descending order
 	// return type: number
-	sortByTFIDF(a, b) {
+	sortByScore(a, b) {
 		// sort by id if TF-IDF score is close enough
-		if(Math.abs(b.tfidf - a.tfidf) < 0.000001) {
+		if(Math.abs(b.score - a.score) < 0.000001) {
 			if(a.id > b.id) return 1;
 			else if(a.id < b.id) return -1;
 			return 0;
 		}
 
-		return b.tfidf - a.tfidf;
+		return b.score - a.score;
 	}
 
 	// gets the urls for the page objects
@@ -65,9 +65,67 @@ class RedisConnector {
 		});
 	}
 
+	// get the results based on a query using an OR representation
+	// return type: array of objects
+	getORResults(queryParts, numberOfResults, outerCallback) {
+		async.map(queryParts, function(word, innerCallback) {
+			this.client.lrange(word, 0, -1, function(err, reply) {
+				if (err) console.log(err);
+
+				return innerCallback(null, reply.map(function(entry) {
+					return entry.replace(/['"()\s]/g, "");
+				}));
+			});
+		}.bind({client: this.client}), function(err, results) {
+			let maxLength = -1;
+			let hasEmptyResult = false;
+			results.forEach(result => {
+				if(result.length > maxLength) {
+					maxLength = result.length;
+				} else if(result.length === 0) {
+					hasEmptyResult = true;
+				}
+			});
+
+			if(hasEmptyResult) {
+				return outerCallback([]);
+			}
+
+			const returnSet = [];
+			const idToOccurrence = {};
+			const idToRelevanceScore = {};
+			for(let index = 0; index < maxLength; index++) {
+				for(let j = 0; j < results.length; j++) {
+					if(results[j].length <= index) continue;
+
+					const pageValueAtIndex = results[j][index].split(',');
+
+					if(idToOccurrence.hasOwnProperty(pageValueAtIndex[0])) {
+						idToOccurrence[pageValueAtIndex[0]] += 1;
+					} else {
+						idToOccurrence[pageValueAtIndex[0]] = 1;
+						idToRelevanceScore[pageValueAtIndex[0]] = pageValueAtIndex[1];
+					}
+
+					if(idToOccurrence[pageValueAtIndex[0]] == results.length) {
+						returnSet.push({id: pageValueAtIndex[0], score: pageValueAtIndex[1]});
+					}
+				}
+
+				if(returnSet.length == numberOfResults) {
+					returnSet.sort(this.sortByScore);
+					return outerCallback(returnSet);
+				}
+			}
+
+			returnSet.sort(this.sortByScore);
+			return outerCallback(returnSet);
+		}.bind(this));
+	}
+
 	// gets the results based on a query using an AND representation
 	// return type: array of objects
-	getResults(queryParts, numberOfResults, outerCallback) {
+	getANDResults(queryParts, numberOfResults, outerCallback) {
 		async.map(queryParts, function(word, innerCallback) {
 			this.client.lrange(word, 0, -1, function(err, reply) {
 				if (err) console.log(err);
@@ -92,7 +150,7 @@ class RedisConnector {
 			// loop begins
 			for(let index = 0; index < maxLength; index++) {
 				if(Object.keys(returnSet).length >= numberOfResults) {
-					returnSet.sort(this.sortByTFIDF);
+					returnSet.sort(this.sortByScore);
 
 					// clone returnSet and see if adding the frontier will change anything
 					let returnSetClone = _.cloneDeep(returnSet);
@@ -103,16 +161,16 @@ class RedisConnector {
 						const lineSplit = results[j][pointers[j]].split(",");
 
 						if(idToIndexMapping.hasOwnProperty(lineSplit[0])) {
-							returnSetClone[idToIndexMapping[lineSplit[0]]].tfidf += parseFloat(lineSplit[1]);
+							returnSetClone[idToIndexMapping[lineSplit[0]]].score += parseFloat(lineSplit[1]);
 							pointers[j] += 1;
 						} else {
-							returnSetClone.push({ id: lineSplit[0], tfidf: parseFloat(lineSplit[1]) });
+							returnSetClone.push({ id: lineSplit[0], score: parseFloat(lineSplit[1]) });
 							idToIndexMapping[returnSetClone.length] = lineSplit[0];
 						}
 					}
 
 					// sort in descending order of TF-IDF
-					returnSetClone.sort(this.sortByTFIDF);
+					returnSetClone.sort(this.sortByScore);
 
 					returnSet = returnSet.slice(0, numberOfResults);
 					returnSetClone = returnSetClone.slice(0, numberOfResults);
@@ -126,16 +184,16 @@ class RedisConnector {
 
 				// get next highest TF-IDF scoring page id
 				let pointerToIncrement = -1;
-				let maxTFIDFPageID = '';
-				let maxTFIDF = -1;
+				let maxScorePageID = '';
+				let maxScore = -1;
 				for(let j = 0; j < results.length; j++) {
 					if(index >= results[j].length) continue;
 					const lineSplit = results[j][pointers[j]].split(",");
-					const tfidf = parseFloat(lineSplit[1]);
+					const score = parseFloat(lineSplit[1]);
 
-					if(tfidf > maxTFIDF) {
-						maxTFIDF = tfidf;
-						maxTFIDFPageID = lineSplit[0];
+					if(score > maxScore) {
+						maxScore = score;
+						maxScorePageID = lineSplit[0];
 						pointerToIncrement = j;
 					}
 				}
@@ -146,11 +204,11 @@ class RedisConnector {
 				}
 
 				// add TF-IDF value to result set and update id to index mapping
-				if(idToIndexMapping.hasOwnProperty(maxTFIDFPageID)) {
-					returnSet[idToIndexMapping[maxTFIDFPageID]].tfidf += maxTFIDF;
+				if(idToIndexMapping.hasOwnProperty(maxScorePageID)) {
+					returnSet[idToIndexMapping[maxScorePageID]].score += maxScore;
 				} else {
-					idToIndexMapping[maxTFIDFPageID] = returnSet.length;
-					returnSet.push({id: maxTFIDFPageID, tfidf: maxTFIDF});
+					idToIndexMapping[maxScorePageID] = returnSet.length;
+					returnSet.push({id: maxScorePageID, score: maxScore});
 				}
 			}
 

@@ -43,11 +43,11 @@ app.post('/', function(req, res) {
 	console.log("[SERVER]: query: " + queryParts);
 
 	const redis_connector = new RedisConnector();
-	redis_connector.getResults(new Set(queryParts), 10, function(redisResults) {
+	redis_connector.getORResults(new Set(queryParts), 10, function(redisResults) {
 		redis_connector.getPageURLs(redisResults, function(finalResults) {
 			res.render('home', {query: req.body.query, results: finalResults});
 			var t1 = Date.now();
-			console.log("[SERVER]: task completed in " + (t1-t0) + " ms");
+			console.log("[SERVER]: task completed in " + (t1 - t0) + " ms");
 			redis_connector.close();
 		});
 	});

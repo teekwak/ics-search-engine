@@ -7,6 +7,8 @@ const redis = require('redis');
 class RedisConnector {
 	constructor() {
 		this.client = redis.createClient();
+		this.pageRankWeight = 10000.0;
+		this.cosineSimilarityWeight = 1.0;
 	}
 
 	// close connection to Redis
@@ -47,7 +49,7 @@ class RedisConnector {
 	// return type: array of objects
 	getPageURLs(pageObjects, callback) {
 		async.map(pageObjects, function(obj, innerCallback) {
-			this.client.get('&_' + obj.id, function(err, reply) {
+			this.client.get('&id_' + obj.id, function(err, reply) {
 				if (err) console.log(err);
 
 				return innerCallback(null, {id: obj.id, url: reply});
@@ -65,62 +67,142 @@ class RedisConnector {
 		});
 	}
 
+	addPageRankScores(pageObjects, numberOfResults, outerCallback) {
+		const PAGERANK_WEIGHT = this.pageRankWeight;
+
+		async.map(pageObjects, function(obj, innerCallback) {
+			this.client.get('&pr_' + obj.id, function(err, reply) {
+				if(err) console.log(err);
+
+				console.log(PAGERANK_WEIGHT * parseFloat(reply));
+
+				obj.score += PAGERANK_WEIGHT * parseFloat(reply);
+
+				return innerCallback(null, obj);
+			});
+		}.bind({client: this.client}), function(err, results) {
+			return outerCallback(results.sort(function(a, b) {
+				if(Math.abs(b.score - a.score) < 0.000001) {
+					if(a.id > b.id) return 1;
+					else if(a.id < b.id) return -1;
+					return 0;
+				}
+
+				return b.score - a.score;
+			}).slice(0, numberOfResults));
+		});
+	}
+
+	// get the magnitude of the page
+	// return type: array of objects {id, score}
+	addMagnitude(pageObjects, outerCallback) {
+		async.map(pageObjects, function(obj, innerCallback) {
+			this.client.get('&mag_' + obj.id, function(err, reply) {
+				if(err) console.log(err);
+
+				obj.magnitude = parseFloat(reply);
+
+				return innerCallback(null, obj);
+			});
+		}.bind({client: this.client}), function(err, results) {
+			return outerCallback(results);
+		});
+	}
+
+	// compute weighted cosine similarity and weighted pagerank sum
+	// return type: array of objects {id, score}
+	addCosineSimilarityScores(queryParts, pageObjects, outerCallback) {
+		const COSINE_SIMILARITY_WEIGHT = this.cosineSimilarityWeight;
+
+		const queryWordCounts = {};
+		queryParts.forEach(word => {
+			if(!queryWordCounts.hasOwnProperty(word)) {
+				queryWordCounts[word] = 0;
+			}
+			queryWordCounts[word] += 1;
+		});
+
+		// make all database query strings first
+		const dbQueries = [];
+		new Set(queryParts).forEach(part => {
+			pageObjects.forEach(obj => {
+				dbQueries.push('&wc_' + obj.id + '_' + part);
+			});
+		});
+
+		async.map(dbQueries, function(query, innerCallback) {
+			this.client.get(query, function(err, reply) {
+				if(err) console.log(err);
+
+				const splitQuery = query.split('_');
+				return innerCallback(null, {id: splitQuery[1], word: splitQuery[2], wc: reply});
+			});
+		}.bind({client: this.client}), function(err, results) {
+			// combine results by id
+			const pageDataMapping = {};
+			results.forEach(result => {
+				if(!pageDataMapping.hasOwnProperty(result.id)) {
+					pageDataMapping[result.id] = {};
+				}
+
+				pageDataMapping[result.id][result.word] = result.wc;
+			});
+
+			// combine pageDataMapping and pageObjects
+			pageObjects.forEach(pageObject => {
+				pageObject.words = pageDataMapping[pageObject.id];
+			});
+
+			// compute magnitude of query
+			const magnitudeOfQuery = Math.sqrt((Object.values(queryWordCounts).map(function(value) {
+				return value * value;
+			})).reduce(function(accumulated, value) {
+				return accumulated + value;
+			}, 0));
+
+			// calculate dot product between query and document
+			// assign score to object
+			pageObjects.forEach(pageObject => {
+				let dotProduct = 0;
+				Object.keys(queryWordCounts).forEach(key => {
+					dotProduct += queryWordCounts[key] * pageObject.words[key];
+				});
+
+				pageObject.score = COSINE_SIMILARITY_WEIGHT * (dotProduct / (magnitudeOfQuery * pageObject.magnitude));
+			});
+
+			return outerCallback(pageObjects);
+		});
+	}
+
+
 	// get the results based on a query using an OR representation
-	// return type: array of objects
-	getORResults(queryParts, numberOfResults, outerCallback) {
+	// return type: array of objects {id, score}
+	getORResults(queryParts, outerCallback) {
 		async.map(queryParts, function(word, innerCallback) {
 			this.client.lrange(word, 0, -1, function(err, reply) {
-				if (err) console.log(err);
+				if(err) console.log(err);
 
 				return innerCallback(null, reply.map(function(entry) {
 					return entry.replace(/['"()\s]/g, "");
 				}));
 			});
 		}.bind({client: this.client}), function(err, results) {
-			let maxLength = -1;
-			let hasEmptyResult = false;
-			results.forEach(result => {
-				if(result.length > maxLength) {
-					maxLength = result.length;
-				} else if(result.length === 0) {
-					hasEmptyResult = true;
-				}
+			const emptyResults = _.filter(results, function(result) {
+				return result.length === 0;
 			});
 
-			if(hasEmptyResult) {
+			if(emptyResults.length > 0) {
 				return outerCallback([]);
 			}
 
-			const returnSet = [];
-			const idToOccurrence = {};
-			const idToRelevanceScore = {};
-			for(let index = 0; index < maxLength; index++) {
-				for(let j = 0; j < results.length; j++) {
-					if(results[j].length <= index) continue;
+			const returnedResults = [];
+			_.intersection.apply(_, results).forEach(entry => {
+				returnedResults.push({id: entry, score: 0.0});
+			});
 
-					const pageValueAtIndex = results[j][index].split(',');
-
-					if(idToOccurrence.hasOwnProperty(pageValueAtIndex[0])) {
-						idToOccurrence[pageValueAtIndex[0]] += 1;
-					} else {
-						idToOccurrence[pageValueAtIndex[0]] = 1;
-						idToRelevanceScore[pageValueAtIndex[0]] = pageValueAtIndex[1];
-					}
-
-					if(idToOccurrence[pageValueAtIndex[0]] == results.length) {
-						returnSet.push({id: pageValueAtIndex[0], score: pageValueAtIndex[1]});
-					}
-				}
-
-				if(returnSet.length == numberOfResults) {
-					returnSet.sort(this.sortByScore);
-					return outerCallback(returnSet);
-				}
-			}
-
-			returnSet.sort(this.sortByScore);
-			return outerCallback(returnSet);
-		}.bind(this));
+			return outerCallback(returnedResults);
+		});
 	}
 
 	// gets the results based on a query using an AND representation

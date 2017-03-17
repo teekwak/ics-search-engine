@@ -43,7 +43,7 @@ app.post('/', function(req, res) {
 	console.log("[SERVER]: query: " + queryParts);
 
 	const redis_connector = new RedisConnector();
-	redis_connector.getORResults(new Set(queryParts), function(redisResults) {
+	redis_connector.getMatchingResults(new Set(queryParts), function(redisResults) {
 		redis_connector.addMagnitude(redisResults, function(magnitudeResults) {
 			redis_connector.addCosineSimilarityScores(queryParts, magnitudeResults, function(scoreResults) {
 				redis_connector.addPageRankScores(scoreResults, 10, function(resultsNeedURLs) {

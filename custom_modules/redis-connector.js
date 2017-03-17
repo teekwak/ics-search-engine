@@ -7,7 +7,7 @@ const redis = require('redis');
 class RedisConnector {
 	constructor() {
 		this.client = redis.createClient();
-		this.pageRankWeight = 10000.0;
+		this.pageRankWeight = 1000;
 		this.cosineSimilarityWeight = 1.0;
 	}
 
@@ -67,14 +67,14 @@ class RedisConnector {
 		});
 	}
 
+	// adds page rank scores from Redis database to current scores
+	// return type: array of objects
 	addPageRankScores(pageObjects, numberOfResults, outerCallback) {
 		const PAGERANK_WEIGHT = this.pageRankWeight;
 
 		async.map(pageObjects, function(obj, innerCallback) {
 			this.client.get('&pr_' + obj.id, function(err, reply) {
 				if(err) console.log(err);
-
-				console.log(PAGERANK_WEIGHT * parseFloat(reply));
 
 				obj.score += PAGERANK_WEIGHT * parseFloat(reply);
 
@@ -178,7 +178,7 @@ class RedisConnector {
 
 	// get the results based on a query using an OR representation
 	// return type: array of objects {id, score}
-	getORResults(queryParts, outerCallback) {
+	getMatchingResults(queryParts, outerCallback) {
 		async.map(queryParts, function(word, innerCallback) {
 			this.client.lrange(word, 0, -1, function(err, reply) {
 				if(err) console.log(err);
@@ -203,99 +203,6 @@ class RedisConnector {
 
 			return outerCallback(returnedResults);
 		});
-	}
-
-	// gets the results based on a query using an AND representation
-	// return type: array of objects
-	getANDResults(queryParts, numberOfResults, outerCallback) {
-		async.map(queryParts, function(word, innerCallback) {
-			this.client.lrange(word, 0, -1, function(err, reply) {
-				if (err) console.log(err);
-
-				return innerCallback(null, reply.map(function(entry) {
-					return entry.replace(/['"()\s]/g, "");
-				}));
-			});
-		}.bind({client: this.client}), function(err, results) {
-			// create mappings
-			let idToIndexMapping = {};
-			let returnSet = [];
-
-			// created index pointers
-			let maxLength = 0;
-			const pointers = [];
-			results.forEach(result => {
-				pointers.push(0);
-				if(result.length > maxLength) maxLength = result.length;
-			});
-
-			// loop begins
-			for(let index = 0; index < maxLength; index++) {
-				if(Object.keys(returnSet).length >= numberOfResults) {
-					returnSet.sort(this.sortByScore);
-
-					// clone returnSet and see if adding the frontier will change anything
-					let returnSetClone = _.cloneDeep(returnSet);
-
-					// add entire frontier to return set
-					for(let j = 0; j < results.length; j++) {
-						if(index >= results[j].length) continue;
-						const lineSplit = results[j][pointers[j]].split(",");
-
-						if(idToIndexMapping.hasOwnProperty(lineSplit[0])) {
-							returnSetClone[idToIndexMapping[lineSplit[0]]].score += parseFloat(lineSplit[1]);
-							pointers[j] += 1;
-						} else {
-							returnSetClone.push({ id: lineSplit[0], score: parseFloat(lineSplit[1]) });
-							idToIndexMapping[returnSetClone.length] = lineSplit[0];
-						}
-					}
-
-					// sort in descending order of TF-IDF
-					returnSetClone.sort(this.sortByScore);
-
-					returnSet = returnSet.slice(0, numberOfResults);
-					returnSetClone = returnSetClone.slice(0, numberOfResults);
-
-					if(this.compareIds(returnSet, returnSetClone)) {
-						return outerCallback(returnSet);
-					} else {
-						returnSet = returnSetClone;
-					}
-				}
-
-				// get next highest TF-IDF scoring page id
-				let pointerToIncrement = -1;
-				let maxScorePageID = '';
-				let maxScore = -1;
-				for(let j = 0; j < results.length; j++) {
-					if(index >= results[j].length) continue;
-					const lineSplit = results[j][pointers[j]].split(",");
-					const score = parseFloat(lineSplit[1]);
-
-					if(score > maxScore) {
-						maxScore = score;
-						maxScorePageID = lineSplit[0];
-						pointerToIncrement = j;
-					}
-				}
-
-				// increment pointer
-				if(pointerToIncrement != -1) {
-					pointers[pointerToIncrement] += 1;
-				}
-
-				// add TF-IDF value to result set and update id to index mapping
-				if(idToIndexMapping.hasOwnProperty(maxScorePageID)) {
-					returnSet[idToIndexMapping[maxScorePageID]].score += maxScore;
-				} else {
-					idToIndexMapping[maxScorePageID] = returnSet.length;
-					returnSet.push({id: maxScorePageID, score: maxScore});
-				}
-			}
-
-			return Object.keys(returnSet).length !== 0 ? outerCallback(returnSet): outerCallback([]);
-		}.bind(this));
 	}
 }
 
